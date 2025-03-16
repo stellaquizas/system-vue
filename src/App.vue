@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RouterLink, RouterView } from 'vue-router'
+import { VERSION } from './config/version.ts'
 </script>
 
 <template>
@@ -8,7 +9,9 @@ import { RouterLink, RouterView } from 'vue-router'
       <div class="app-container flex justify-between items-center py-4 px-4 md:px-6 lg:px-8">
         <div class="flex items-center">
           <i class="fas fa-paw text-blue-600 text-2xl mr-2"></i>
-          <span class="font-bold text-xl text-blue-600">Spring System</span>
+          <span class="font-bold text-xl text-blue-600" :title="`Version ${VERSION}`"
+            >Spring System</span
+          >
         </div>
         <nav class="flex space-x-4">
           <RouterLink to="/" class="px-3 py-2 rounded hover:bg-blue-100 text-blue-600">

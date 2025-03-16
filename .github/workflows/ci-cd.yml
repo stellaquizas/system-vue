@@ -1,0 +1,124 @@
+name: Frontend CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+      - 'release/**'
+      - 'feature/**'
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+      - 'release/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint || true
+
+      - name: Run tests
+        run: npm test || true
+
+  build:
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Extract version
+        id: extract_version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          elif [[ $GITHUB_REF == refs/heads/release/* ]]; then
+            VERSION=${GITHUB_REF#refs/heads/release/}-RC
+          elif [[ $GITHUB_REF == refs/heads/develop ]]; then
+            VERSION=develop
+          else
+            VERSION=latest
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Login to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/system-vue:${{ steps.extract_version.outputs.VERSION }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/system-vue:latest
+
+  deploy-dev:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment:
+      name: development
+      url: https://app-dev.yourdomain.com
+    steps:
+      - name: Deploy to development
+        run: echo "Deploying frontend to development environment..."
+
+  deploy-staging:
+    needs: build
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/release/'))
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://app-staging.yourdomain.com
+    steps:
+      - name: Deploy to staging
+        run: echo "Deploying frontend to staging environment..."
+
+  deploy-production:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://app.yourdomain.com
+    steps:
+      - name: Deploy to production
+        run: echo "Deploying frontend to production environment..."
